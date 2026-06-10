@@ -25,7 +25,7 @@ when no LLM key is configured, so the platform always runs).
 |-------|-------|
 | Backend | Python · FastAPI · Pydantic · SQLite (dependency‑free KV store) |
 | Frontend | TypeScript · Next.js 14 · React 18 · Tailwind CSS |
-| LLM | OpenAI / Anthropic (optional) with a deterministic offline fallback |
+| LLM | OpenAI / Anthropic / LiteLLM (any OpenAI-compatible gateway), optional, with a deterministic offline fallback |
 
 ```
 testgen/
@@ -70,9 +70,17 @@ docker compose up --build              # frontend :3000, backend :8000
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `TESTGEN_API_KEY` | `changeme-local-dev` | Shared API key (`X-API-Key` header) |
-| `TESTGEN_LLM_PROVIDER` | `auto` | `auto` \| `openai` \| `anthropic` \| `none` |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | – | Enable LLM-driven generation |
+| `TESTGEN_LLM_PROVIDER` | `auto` | `auto` \| `openai` \| `anthropic` \| `litellm` \| `none` |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | – | Enable direct OpenAI/Anthropic generation |
+| `LITELLM_BASE_URL` / `LITELLM_API_KEY` | – | Route via a LiteLLM proxy / any OpenAI-compatible gateway |
+| `TESTGEN_LITELLM_MODEL` | `gpt-4o` | Default model when using the `litellm` provider |
 | `TESTGEN_DB_DIR` | `backend/data` | SQLite storage location |
+
+With `auto`, the provider resolves to LiteLLM if a gateway is configured, else
+OpenAI, else Anthropic, else the offline engine. To centralise model access
+behind one gateway, set `TESTGEN_LLM_PROVIDER=litellm` with `LITELLM_BASE_URL`
+(and `LITELLM_API_KEY`); the model is routed through the OpenAI-compatible path
+(an `openai/` prefix is added automatically when needed).
 
 Without an LLM key the platform uses the deterministic template engine — useful
 for demos, CI and offline development.

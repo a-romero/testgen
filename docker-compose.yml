@@ -7,9 +7,14 @@ services:
       # Set a real key + provider to enable LLM-driven generation. Without them
       # the platform runs with the deterministic template engine.
       TESTGEN_API_KEY: ${TESTGEN_API_KEY:-changeme-local-dev}
+      # auto | openai | anthropic | litellm | none
       TESTGEN_LLM_PROVIDER: ${TESTGEN_LLM_PROVIDER:-auto}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # LiteLLM gateway routing (any OpenAI-compatible endpoint).
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      TESTGEN_LITELLM_MODEL: ${TESTGEN_LITELLM_MODEL:-gpt-4o}
       TESTGEN_DB_DIR: /data
     volumes:
       - testgen_data:/data

@@ -22,11 +22,18 @@ class Settings:
 
     # LLM configuration. If no provider/key is configured the generator falls
     # back to a deterministic template engine, so the platform always runs.
-    LLM_PROVIDER: str = os.environ.get("TESTGEN_LLM_PROVIDER", "auto")  # auto|openai|anthropic|none
+    # Providers: auto | openai | anthropic | litellm | none
+    LLM_PROVIDER: str = os.environ.get("TESTGEN_LLM_PROVIDER", "auto")
     OPENAI_API_KEY: str | None = os.environ.get("OPENAI_API_KEY")
     OPENAI_MODEL: str = os.environ.get("TESTGEN_OPENAI_MODEL", "gpt-4o")
     ANTHROPIC_API_KEY: str | None = os.environ.get("ANTHROPIC_API_KEY")
     ANTHROPIC_MODEL: str = os.environ.get("TESTGEN_ANTHROPIC_MODEL", "claude-3-7-sonnet-20250219")
+    # LiteLLM gives access to any OpenAI-compatible endpoint (incl. a LiteLLM
+    # proxy/gateway). When ``LITELLM_BASE_URL`` is set the model is routed through
+    # the OpenAI-compatible path with an ``openai/`` prefix when needed.
+    LITELLM_MODEL: str = os.environ.get("TESTGEN_LITELLM_MODEL", "gpt-4o")
+    LITELLM_BASE_URL: str | None = os.environ.get("LITELLM_BASE_URL")
+    LITELLM_API_KEY: str | None = os.environ.get("LITELLM_API_KEY")
     LLM_TEMPERATURE: float = float(os.environ.get("TESTGEN_LLM_TEMPERATURE", "0.7"))
 
 
