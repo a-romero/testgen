@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark modern theme. */
+:root {
+  --bg: 26 26 26;
+  --card: 38 38 38;
+  --text: 255 255 255;
+  --text-secondary: 156 163 175;
+  --border: 55 65 81;
+  --input-bg: 55 65 81;
+  --hover: 75 85 99;
+  --accent: 20 92 92;
+}
+
+html, body, #__next { height: 100%; }
+body {
+  @apply bg-[rgb(var(--bg))] text-[rgb(var(--text))];
+  background-image: radial-gradient(1200px 600px at 10% -10%, rgba(20,92,92,0.08), transparent),
+                    radial-gradient(1000px 600px at 100% 10%, rgba(20,92,92,0.06), transparent);
+}
+
+.container { @apply max-w-[96%] mx-auto px-4; }
+
+.card { @apply bg-[rgb(var(--card))] rounded-2xl shadow-lg border border-[rgb(var(--border))]; }
+
+.btn {
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[rgb(var(--border))]
+         bg-[rgb(var(--card))] text-[rgb(var(--text))]
+         hover:bg-[rgb(var(--hover))] transition-colors duration-200 cursor-pointer;
+}
+.btn-primary {
+  @apply bg-[rgb(var(--accent))] text-white border-[rgb(var(--accent))] hover:bg-[rgb(17,80,80)];
+}
+.btn-sm { @apply px-2.5 py-1 text-sm rounded-lg; }
+
+.input {
+  @apply border border-[rgb(var(--border))] rounded-xl px-3 py-2 w-full
+         bg-[rgb(var(--input-bg))] text-[rgb(var(--text))]
+         focus:outline-none focus:ring-2 focus:ring-[rgb(var(--accent))]
+         focus:border-[rgb(var(--accent))] transition-colors duration-200;
+}
+.label { @apply text-sm text-[rgb(var(--text-secondary))] font-medium; }
+
+.badge {
+  @apply inline-flex items-center px-2 py-1 rounded-lg text-xs
+         bg-[rgb(var(--input-bg))] text-[rgb(var(--text))] border border-[rgb(var(--border))];
+}
+.kbd { @apply px-2 py-1 rounded-md border border-[rgb(var(--border))] text-xs bg-[rgb(var(--card))] text-[rgb(var(--text))]; }
+
+select.input, select.input option, textarea.input { @apply bg-[rgb(var(--input-bg))] text-[rgb(var(--text))]; }
+textarea.input { @apply resize-y; }
+
+input[type="file"] {
+  @apply bg-[rgb(var(--input-bg))] text-[rgb(var(--text))]
+         border border-[rgb(var(--border))] rounded-xl px-3 py-2 w-full
+         file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium
+         file:bg-[rgb(var(--accent))] file:text-white hover:file:bg-[rgb(17,80,80)];
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: rgb(var(--bg)); }
+*::-webkit-scrollbar-thumb { background: rgb(var(--border)); border-radius: 8px; }
+*::-webkit-scrollbar-thumb:hover { background: rgb(var(--hover)); }
+
+a { @apply text-[rgb(var(--accent))] hover:text-[rgb(17,80,80)] transition-colors duration-200; }
+code { @apply bg-[rgb(var(--input-bg))] text-[rgb(var(--text))] px-2 py-1 rounded-md text-sm; }
+pre { @apply bg-[rgb(var(--input-bg))] text-[rgb(var(--text))] p-4 rounded-xl overflow-x-auto; }
+
+.btn:disabled, .input:disabled { @apply opacity-50 cursor-not-allowed; }
+.success { @apply text-green-400; }
+.error { @apply text-red-400; }
+.warning { @apply text-yellow-400; }

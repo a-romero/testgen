@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Set a real key + provider to enable LLM-driven generation. Without them
+      # the platform runs with the deterministic template engine.
+      TESTGEN_API_KEY: ${TESTGEN_API_KEY:-changeme-local-dev}
+      TESTGEN_LLM_PROVIDER: ${TESTGEN_LLM_PROVIDER:-auto}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TESTGEN_DB_DIR: /data
+    volumes:
+      - testgen_data:/data
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE: http://localhost:8000
+      NEXT_PUBLIC_API_KEY: ${TESTGEN_API_KEY:-changeme-local-dev}
+    depends_on:
+      - backend
+
+volumes:
+  testgen_data:
