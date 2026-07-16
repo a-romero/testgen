@@ -87,6 +87,10 @@ update(client, external_ref, testcase)-> ExternalRef  # idempotent re-push
 link(client, test_ref, requirement_ref, link_type)    # e.g. Test "tests" Story
 capabilities()                        -> {supports_update, supports_link, bdd_field,…}
 ```
+`target` carries the **destination Jira project** (`project_key`) and issue type.
+It defaults to the connection's `push_project_key` / `push_issue_type` and can be
+**overridden per push** from the UI, so different runs can target different Jira
+projects with the same connection.
 
 ### 2.4 `FieldMapper` — declarative, per-connection
 Generalizes today's `export.py::DEFAULT_JIRA_MAPPING` into structured, per-
@@ -102,8 +106,8 @@ Mirrors the existing `Collection` KV pattern in `storage.py`.
 
 | Collection | Purpose | Secrets? |
 |---|---|---|
-| `connections` | A configured provider instance (per project or workspace): `{id, provider, base_url, auth_method, oauth_client_id, project_key, ca_bundle, mapping_preset, field_overrides}` | No (client *secret* stays in env/secret store) |
-| `identities` | Per **(app-user, connection)** credential: `{user_id, connection_id, access_token*, refresh_token*, expires_at, scopes, external_account}` — **encrypted at rest** | Yes (encrypted) |
+| `connections` | A configured provider instance (per project or workspace): `{id, provider, base_url, auth_method, ca_bundle, mapping_preset, field_overrides,` **`push_project_key`** `,` **`push_issue_type`** `,` **`import_project_key`** `}`. The **push target Jira project** is configured here and can be overridden per push. | No (client *secret* stays in env/secret store) |
+| `identities` | Per **(app-user, connection)** credential: `{user_id, connection_id,` **`jira_username`** `, pat*, access_token*, refresh_token*, expires_at, scopes, external_account}` — **encrypted at rest**. For PAT auth the user's **manually entered Jira identity + PAT** live here (see §4). | Yes (encrypted) |
 | `external_links` | `{entity_type, testgen_id, external_key, url, hash, synced_at}` — idempotent sync ledger (document.id↔issueKey, testcase.id↔testKey) | No |
 
 Small extensions to existing models: `Document.source` and
@@ -118,7 +122,7 @@ same `AuthStrategy` port, chosen per connection:
 
 | Method | Jira support | UX | Notes |
 |---|---|---|---|
-| **PAT (Personal Access Token)** | **Data Center 8.14+** | User pastes a token they create in Jira → *Profile → Personal Access Tokens* | **Simplest per-user identity.** Bearer token; validated via `/rest/api/2/myself`. Recommended Phase 1. |
+| **PAT (Personal Access Token)** — *chosen for Phase 1* | **Data Center 8.14+** | In **Settings**, the user enters their **Jira identity (username/email)** and **pastes a PAT** they created in Jira → *Profile → Personal Access Tokens* | **Simplest per-user identity, no SSO needed.** Bearer token; both the entered identity and PAT are validated against `/rest/api/2/myself` and stored encrypted. |
 | **OAuth 2.0 (Auth Code + PKCE)** | DC 8.x+ (as OAuth provider via Application Links) | Click "Connect" → redirect to Jira → approve | SSO-friendly, refreshable, no token handling by user. Requires registering a redirect URI + client in Jira. |
 | **OAuth 1.0a (RSA-SHA1)** | Server / older DC | 3-legged request→authorize→access dance | Legacy fallback for estates without OAuth2/PAT. |
 
@@ -141,15 +145,20 @@ later     ── get_client(user) → auto-refresh if expired
 ```
 PAT flow is the same port with no redirect (validate + store the pasted token).
 
-### App-user identity prerequisite
-Today the backend only has a **shared API key** (`deps.py`) — no concept of
-*which* user is calling. Per-user Jira auth needs a real app-user identity to
-bind tokens to. Plan:
-- Introduce a lightweight `current_user` dependency. In an enterprise deploy,
-  populate it from existing **SSO/OIDC** (preferred) via a reverse proxy header
-  or OIDC login; for local/dev, fall back to an `X-User-Id` header.
-- Keep **app authentication (who is the TestGen user)** cleanly separate from
-  **Jira authorization (their token)** — different concerns, different modules.
+### App-user identity — **manual entry in Settings (decided)**
+No SSO/OIDC dependency. The user **types their Jira identity (username/email)
+alongside their PAT** in the Settings → Integrations screen; that entered
+identity is what actions are attributed to and what keys the stored credential.
+
+- The manually entered Jira identity **is** the `user_id` for the credential
+  record — on save we call `/rest/api/2/myself` to verify the PAT resolves to
+  that identity, and persist `{jira_username, pat}` **encrypted**.
+- The frontend passes the active identity on requests (e.g. an `X-User-Id`
+  header set from Settings) so the backend loads the right PAT; no login server
+  or reverse proxy is required.
+- **App authentication (who the TestGen user is)** stays cleanly separated from
+  **Jira authorization (their PAT)**, so SSO/OIDC can be slotted in later without
+  touching the adapters — but it is **not** required for this build.
 
 ---
 
@@ -174,8 +183,10 @@ feature). Freshness options: on-demand, scheduled poll, or Jira webhooks.
 
 **Sink (TestGen → Jira).** Only **approved** test cases are pushable (respects
 the existing approval workflow, HLR10). **Idempotent** via `external_links`
-(create vs update). Target is configurable:
-- plain Jira issue of type **Test** (Gherkin in Description), or
+(create vs update). The **destination Jira project is configurable** —
+`push_project_key` on the connection sets the default, and the UI lets the user
+**override the target project (and issue type) per push**. Destination form:
+- plain Jira issue of type **Test** (Gherkin in Description) — Phase 1 default, or
 - **Xray** / **Zephyr** test entity (Gherkin in the app's Cucumber/BDD field).
 Optionally **link** each Test to its source Story (`"tests"` link). Supports a
 **dry-run preview** using the field mapping before writing anything.
@@ -189,21 +200,23 @@ POST   /integrations/connections                   # configure a connection
 GET    /integrations/connections                   # list (per project/workspace)
 POST   /integrations/connections/{id}/login/start  # OAuth: returns authorize URL
 GET    /integrations/callback                       # OAuth redirect handler
-POST   /integrations/connections/{id}/login/pat     # PAT: submit + validate token
-GET    /integrations/connections/{id}/status        # is current user connected
+POST   /integrations/connections/{id}/login/pat     # PAT: submit {jira_username, pat} → verify via /myself → store encrypted
+GET    /integrations/connections/{id}/status        # is current user connected (+ resolved account)
 DELETE /integrations/connections/{id}/identity      # disconnect / revoke
 POST   /integrations/connections/{id}/import        # JQL search → create Documents
-POST   /integrations/connections/{id}/push          # push testcase ids (dry_run flag)
+POST   /integrations/connections/{id}/push          # push testcase ids; body may override {project_key, issue_type, dry_run}
 ```
 
 ## 8. Frontend
 - **Settings → Integrations**: list providers, add a connection (base URL, auth
-  method, project key, mapping preset), **Connect** (OAuth popup) or paste PAT,
-  live connection status.
+  method, **push project key**, mapping preset). For PAT: fields to **enter the
+  Jira identity (username/email) and paste the PAT**; "Verify" calls
+  `/myself` and shows the resolved account + live status.
 - **Requirements page**: "Import from Jira" — JQL search, pick issues → creates
   versioned Documents.
-- **Review & Approve page**: "Push to Jira" — choose target, **dry-run preview**
-  of the mapped issue, then push; shows resulting issue links.
+- **Review & Approve page**: "Push to Jira" — **choose/confirm the target Jira
+  project** (defaults to the connection's, overridable), **dry-run preview** of
+  the mapped issue, then push; shows resulting issue links.
 
 ## 9. Testing / offline
 - Ship a **`fake` adapter** (in-memory) — mirrors the deterministic-LLM
@@ -216,23 +229,29 @@ POST   /integrations/connections/{id}/push          # push testcase ids (dry_run
 ## 10. Phased roadmap
 | Phase | Scope |
 |---|---|
-| **0 — Framework** | Ports, registry, `fake` adapter, storage (`connections`/`identities`/`external_links`), `crypto`, `current_user` identity. No Jira yet. |
-| **1 — Jira PAT MVP** | Jira Server adapter with **PAT** auth; JQL import → Documents; push → plain "Test" issue; field mapping; idempotency. Fastest path to per-user identity on DC 8.14+. |
+| **0 — Framework** | Ports, registry, `fake` adapter, storage (`connections`/`identities`/`external_links`), `crypto`, **manual `X-User-Id` identity dependency**. No Jira yet. |
+| **1 — Jira PAT MVP** | Jira Server adapter with **PAT** auth (**manual identity + PAT entered in Settings**); JQL import → Documents; push → plain "Test" issue in a **configurable target project**; field mapping; idempotency. Delivers per-user "acts as me" on DC 8.14+ with no SSO. |
 | **2 — Jira OAuth** | OAuth 2.0 (DC) + OAuth 1.0a fallback; disconnect/refresh. |
 | **3 — Test-mgmt + sync** | Xray/Zephyr mapping presets; Test↔Story linking; webhooks / scheduled sync. |
 | **4 — Prove modularity** | Add a second provider (e.g. Azure DevOps) against the same ports. |
 
 ---
 
-## 11. Open decisions (shape the build)
-1. **Auth method / Jira version** — is the target **Data Center 8.14+** (enables
-   PAT & OAuth2), or older **Server** (OAuth 1.0a only)? Drives Phase 1 auth.
-2. **Test management** — push to **plain Jira "Test" issues**, or **Xray** /
-   **Zephyr**? Big impact on the sink + field mapping.
-3. **App-user identity** — is there existing **SSO/OIDC** to identify the
-   TestGen user, or do we add a login layer?
-4. **Secret storage** — env var vs Vault/KMS for the OAuth client secret and the
-   token-encryption key.
-5. **Redirect URI / Application Link** — a stable backend URL and Jira
-   application-link setup are prerequisites for OAuth2.
+## 11. Decisions
+
+**Confirmed**
+- ✅ **Auth = PAT**, with the user's **Jira identity + PAT entered manually in
+  Settings** (no SSO/OIDC). Assumes Jira **Data Center 8.14+** (PAT support).
+- ✅ **Push target project is configurable** on the connection and overridable
+  per push.
+
+**Still open**
+1. **Test management** — Phase 1 targets **plain Jira "Test" issues** by default;
+   confirm whether **Xray** / **Zephyr** support is needed (adds mapping presets
+   + the BDD/Cucumber field), and if so, which and when.
+2. **Secret storage** — env var vs Vault/KMS for the token-encryption key
+   (`TESTGEN_SECRET_KEY`).
+3. **OAuth (later phases)** — if OAuth 2.0/1.0a is ever wanted, a stable backend
+   redirect URI + Jira application-link setup become prerequisites. Not needed
+   for the PAT build.
 ```
